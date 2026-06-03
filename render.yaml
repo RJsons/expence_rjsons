@@ -1,3 +1,8 @@
+databases:
+  - name: expence-db
+    databaseName: expence_db
+    plan: free
+
 services:
   - type: web
     name: expence-backend
@@ -5,11 +10,10 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      # Set DATABASE_URL in the Render dashboard → Environment tab.
-      # Use the "Internal Database URL" from your Render PostgreSQL service.
-      # If not set, the app falls back to SQLite (data is lost on redeploy).
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: expence-db
+          property: connectionString
       - key: SECRET_KEY
         generateValue: true
       - key: ALGORITHM
