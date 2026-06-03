@@ -1,32 +1,19 @@
+import logging
+import os
+from contextlib import asynccontextmanager
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.database import engine
+from app.models import Base
 from app.routers import auth, budgets, categories, expenses, exports, recurring, reports
 from app.services.recurring import generate_due_recurring_expenses
 
-app = FastAPI(
-    title="Expense Tracker API",
-    description=(
-        "A comprehensive expense tracking API with custom categories, "
-        "budget limits & alerts, recurring expenses, analytics reports, "
-        "and CSV/PDF export."
-    ),
-    version="2.0.0",
-)
+logger = logging.getLogger("uvicorn.error")
 
-# ─── CORS ─────────────────────────────────────────────────────────────────────
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ─── APScheduler ──────────────────────────────────────────────────────────────
-# Runs generate_due_recurring_expenses() every day at 00:05
-_scheduler = BackgroundScheduler()
+_scheduler = BackgroundScheduler(timezone="UTC")
 _scheduler.add_job(
     generate_due_recurring_expenses,
     trigger="cron",
@@ -36,23 +23,48 @@ _scheduler.add_job(
 )
 
 
-@app.on_event("startup")
-def startup_event() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── Startup ───────────────────────────────────────────────────────────────
+    Base.metadata.create_all(bind=engine)
     _scheduler.start()
-    print("INFO:     Scheduler started — recurring expenses generated daily at 00:05")
+    logger.info("Scheduler started — recurring expenses generated daily at 00:05 UTC")
     try:
-        from app.services.recurring import generate_due_recurring_expenses
-        res = generate_due_recurring_expenses()
-        print(f"INFO:     Startup recurring expense generation check: {res}")
-    except Exception as e:
-        print(f"ERROR:    Failed to run startup recurring check: {e}")
+        result = generate_due_recurring_expenses()
+        logger.info("Startup recurring check: %s", result)
+    except Exception as exc:
+        logger.error("Startup recurring check failed: %s", exc)
 
+    yield
 
-@app.on_event("shutdown")
-def shutdown_event() -> None:
+    # ── Shutdown ──────────────────────────────────────────────────────────────
     _scheduler.shutdown(wait=False)
-    print("INFO:     Scheduler stopped")
+    logger.info("Scheduler stopped")
 
+
+app = FastAPI(
+    title="Expense Tracker API",
+    description=(
+        "A comprehensive expense tracking API with custom categories, "
+        "budget limits & alerts, recurring expenses, analytics reports, "
+        "and CSV/PDF export."
+    ),
+    version="2.0.0",
+    lifespan=lifespan,
+)
+
+# ─── CORS ─────────────────────────────────────────────────────────────────────
+# allow_origins=["*"] and allow_credentials=True cannot be used together —
+# browsers reject it. Use explicit origins if you need credentials (cookies).
+# JWT tokens travel in the Authorization header, so credentials=False is fine.
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_origins,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(auth.router)
@@ -67,4 +79,12 @@ app.include_router(exports.router)
 # ─── Health check ─────────────────────────────────────────────────────────────
 @app.get("/health", tags=["Health"])
 def health_check():
-    return {"status": "ok", "version": "2.0.0"}
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception as exc:
+        logger.error("Health check DB failure: %s", exc)
+        db_status = "error"
+    return {"status": "ok", "version": "2.0.0", "db": db_status}

@@ -5,5 +5,14 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.12.0"
+      # Set DATABASE_URL in the Render dashboard → Environment tab.
+      # Use the "Internal Database URL" from your Render PostgreSQL service.
+      # If not set, the app falls back to SQLite (data is lost on redeploy).
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "10080"

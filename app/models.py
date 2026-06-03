@@ -79,6 +79,3 @@ class RecurringTemplateDB(Base):
 
     owner = relationship("UserDB", back_populates="recurring_templates")
 
-
-# Ensure all tables exist (safe to call multiple times)
-Base.metadata.create_all(bind=engine)

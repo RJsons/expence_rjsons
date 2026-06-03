@@ -1,4 +1,5 @@
 import datetime
+import logging
 import os
 from typing import Optional
 
@@ -11,7 +12,18 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import UserDB
 
-SECRET_KEY: str = os.getenv("SECRET_KEY", "SUPER_SECRET_TOKEN_ENCRYPTION_KEY_FOR_EXPENSE_APP")
+logger = logging.getLogger("uvicorn.error")
+
+_raw_secret = os.getenv("SECRET_KEY", "")
+if not _raw_secret:
+    # Warn loudly in logs — never crash, but never be silent either
+    logger.warning(
+        "SECRET_KEY is not set. Using an insecure default. "
+        "Set SECRET_KEY in your environment before going to production."
+    )
+    _raw_secret = "INSECURE_DEFAULT_KEY_CHANGE_BEFORE_PRODUCTION"
+
+SECRET_KEY: str = _raw_secret
 ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(60 * 24 * 7)))
 
