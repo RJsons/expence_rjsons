@@ -56,6 +56,23 @@ class ExpenseResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ─── All-members expense view ─────────────────────────────────────────────────
+
+
+class ExpenseWithUser(BaseModel):
+    id: int
+    title: str
+    amount: float
+    date: datetime.datetime
+    category: str
+    is_income: bool
+    notes: str
+    user_id: int
+    user_name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ─── Categories ───────────────────────────────────────────────────────────────
 
 

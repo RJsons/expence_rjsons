@@ -6,9 +6,37 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import ExpenseDB, UserDB
-from app.schemas import ExpenseCreate, ExpenseResponse
+from app.schemas import ExpenseCreate, ExpenseResponse, ExpenseWithUser
 
 router = APIRouter(prefix="/api/expenses", tags=["Expenses"])
+
+
+@router.get("/all", response_model=List[ExpenseWithUser])
+def get_all_expenses(
+    current_user: UserDB = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return every expense in the system joined with the owner's name, newest first."""
+    rows = (
+        db.query(ExpenseDB, UserDB.name.label("user_name"), UserDB.id.label("uid"))
+        .join(UserDB, ExpenseDB.user_id == UserDB.id)
+        .order_by(ExpenseDB.date.desc())
+        .all()
+    )
+    return [
+        ExpenseWithUser(
+            id=expense.id,
+            title=expense.title,
+            amount=expense.amount,
+            date=expense.date,
+            category=expense.category,
+            is_income=expense.is_income,
+            notes=expense.notes or "",
+            user_id=uid,
+            user_name=user_name,
+        )
+        for expense, user_name, uid in rows
+    ]
 
 
 @router.get("", response_model=List[ExpenseResponse])
