@@ -1,15 +1,35 @@
 import datetime
+import re
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 
 
 class UserCreate(BaseModel):
     name: str = Field(..., min_length=2)
-    mobile_number: str = Field(..., min_length=10)
+    mobile_number: str
     password: str = Field(..., min_length=6)
+
+    @field_validator("mobile_number")
+    @classmethod
+    def validate_mobile_number(cls, v: str) -> str:
+        digits = re.sub(r"[\s\-()]", "", v)
+        # strip optional leading +91 or 0
+        if digits.startswith("+91"):
+            digits = digits[3:]
+        elif digits.startswith("91") and len(digits) == 12:
+            digits = digits[2:]
+        elif digits.startswith("0") and len(digits) == 11:
+            digits = digits[1:]
+        if not digits.isdigit():
+            raise ValueError("Mobile number must contain only digits")
+        if len(digits) != 10:
+            raise ValueError("Mobile number must be exactly 10 digits")
+        if not re.match(r"^[6-9]", digits):
+            raise ValueError("Mobile number must start with 6, 7, 8, or 9")
+        return digits
 
 
 class UserLogin(BaseModel):
